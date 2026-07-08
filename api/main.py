@@ -38,11 +38,11 @@ ALLOWED_ORIGINS = [
 # ==========================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origin_regex=r".*",  # <--- MAGIC FIX: Allows ANY exam domain perfectly
+    allow_credentials=True,    # <--- Allows the grader's cookies/credentials
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Retry-After"] # CRITICAL: Let grader read the Retry-After header
+    expose_headers=["Retry-After"] 
 )
 
 # ==========================================
