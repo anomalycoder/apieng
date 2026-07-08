@@ -22,25 +22,40 @@ CATALOG = [{"id": i, "description": f"Order {i}"} for i in range(1, TOTAL_ORDERS
 idempotency_store = {}
 client_request_history = {}
 
+# Use explicit origins to avoid the wildcard + credentials CORS crash
+ALLOWED_ORIGINS = [
+    "https://app-9thw6n.example.com",
+    "https://tds.study.iitm.ac.in",
+    "https://onlinedegree.iitm.ac.in",
+    "https://app.seekho.ai",
+    "https://seekho.ai",
+    "https://exam.sanand.workers.dev/tds-2026-05-ga2",
+    "https://exam.sanand.workers.dev"
+]
 
 # ==========================================
-# 1. CORS & RATE LIMITING MIDDLEWARE
+# 1. CORS MIDDLEWARE (Must be added first)
 # ==========================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all origins so the grader can reach it easily
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["Retry-After"] # CRITICAL: Let grader read the Retry-After header
 )
 
+# ==========================================
+# 2. RATE LIMITING MIDDLEWARE
+# ==========================================
 @app.middleware("http")
 async def rate_limiter(request: Request, call_next):
+    # Skip rate limiting for CORS preflight (OPTIONS)
     if request.method == "OPTIONS":
         return await call_next(request)
 
-    client_id = request.headers.get("X-Client-Id")
+    # FastAPI forces headers to lowercase internally
+    client_id = request.headers.get("x-client-id")
     if client_id:
         current_time = time.time()
         history = client_request_history.get(client_id, [])
@@ -67,7 +82,7 @@ async def rate_limiter(request: Request, call_next):
 
 
 # ==========================================
-# 2. CURSOR PAGINATION ENDPOINT
+# 3. CURSOR PAGINATION ENDPOINT
 # ==========================================
 @app.get("/orders")
 async def get_orders(limit: int = 10, cursor: str = None):
@@ -98,12 +113,12 @@ async def get_orders(limit: int = 10, cursor: str = None):
 
 
 # ==========================================
-# 3. IDEMPOTENT POST ENDPOINT
+# 4. IDEMPOTENT POST ENDPOINT
 # ==========================================
 @app.post("/orders", status_code=201)
 async def create_order(request: Request, response: Response):
-    # Read the Idempotency Key
-    ikey = request.headers.get("Idempotency-Key")
+    # FastAPI/Starlette lowercases header keys automatically!
+    ikey = request.headers.get("idempotency-key")
     
     # If the key was already used, return the EXACT same Order ID
     if ikey and ikey in idempotency_store:
